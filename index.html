@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Scherzo Fotocamera</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: black;
+        color: white;
+        font-family: "Courier New", monospace;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 30px;
+        overflow-y: auto;
+      }
+      #video,
+      #canvas {
+        display: none;
+      }
+      #text,
+      #info,
+      #photo,
+      #final {
+        margin-top: 30px;
+        font-size: 20px;
+        text-align: center;
+        max-width: 90vw;
+        white-space: pre-wrap;
+      }
+      .shake {
+        animation: shake 0.5s infinite alternate;
+      }
+      @keyframes shake {
+        0% {
+          transform: translateX(-5px);
+        }
+        100% {
+          transform: translateX(5px);
+        }
+      }
+      .image-container {
+        position: relative;
+        display: inline-block;
+      }
+      .image-container img.face {
+        width: 320px;
+        border: 4px solid white;
+        border-radius: 6px;
+      }
+      .image-container img.clown {
+        position: absolute;
+        width: 100px;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0.85;
+      }
+      #flash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: red;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 999;
+      }
+      #intro {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: black;
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+      }
+      #intro-text {
+        font-size: 28px;
+        white-space: nowrap;
+        animation: slide-left 2s ease-in-out, pop-bounce 2s ease-in-out 2s;
+        opacity: 0;
+      }
+      @keyframes slide-left {
+        0% {
+          transform: translateX(100vw);
+          opacity: 0;
+        }
+        50% {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        100% {
+          transform: translateX(-20px);
+          opacity: 1;
+        }
+      }
+      @keyframes pop-bounce {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scale(1.2) rotate(-1deg);
+        }
+        50% {
+          transform: scale(1.15) rotate(1deg);
+        }
+        75% {
+          transform: scale(1.2) rotate(-1deg);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="intro"><div id="intro-text">Preparazione in corso...</div></div>
+
+    <div id="flash"></div>
+
+    <h1>⚠️ Consenti l'accesso alla fotocamera</h1>
+    <video id="video" width="320" height="240" autoplay></video>
+    <canvas id="canvas" width="320" height="240"></canvas>
+
+    <div id="text"></div>
+    <div id="photo"></div>
+    <div id="final"></div>
+    <div id="info"></div>
+
+    <audio
+      id="scream"
+      src="https://www.fesliyanstudios.com/play-mp3/387"
+      preload="auto"
+    ></audio>
+
+    <script>
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const textDiv = document.getElementById("text");
+      const photoDiv = document.getElementById("photo");
+      const finalDiv = document.getElementById("final");
+      const infoDiv = document.getElementById("info");
+      const scream = document.getElementById("scream");
+      const flash = document.getElementById("flash");
+
+      let hasCaptured = false;
+
+      function typeText(text, callback) {
+        let i = 0;
+        textDiv.innerText = "";
+        function write() {
+          if (i < text.length) {
+            textDiv.innerText += text.charAt(i);
+            i++;
+            setTimeout(write, 40);
+          } else if (callback) {
+            callback();
+          }
+        }
+        write();
+      }
+
+      function showShake(callback) {
+        textDiv.classList.add("shake");
+        setTimeout(() => {
+          textDiv.classList.remove("shake");
+          if (callback) callback();
+        }, 2500);
+      }
+
+      async function getBrowserInfo() {
+        const ip = await fetch("https://ipapi.co/json").then(r => r.json()).catch(() => ({}));
+        const battery = await navigator.getBattery?.().catch(() => null);
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const devices = await navigator.mediaDevices?.enumerateDevices().catch(() => []);
+        const performance = window.performance?.timing;
+        const uaData = navigator.userAgentData;
+        const now = new Date();
+
+        const cams = devices.filter(d => d.kind === "videoinput").length;
+        const mics = devices.filter(d => d.kind === "audioinput").length;
+
+        const info = [];
+
+        info.push(`📡 IP: ${ip.ip || "Sconosciuto"}`);
+        info.push(`🌍 Città: ${ip.city || "?"}, ${ip.region || "?"}, ${ip.country_name || "?"}`);
+        info.push(`🏢 ISP: ${ip.org || "?"}`);
+
+        info.push(`\n🧠 Browser: ${navigator.userAgent}`);
+        info.push(`🈯️ Lingua: ${navigator.language}`);
+        if (uaData) info.push(`🔍 UAData: ${uaData.brands?.map(b => `${b.brand} (${b.version})`).join(", ")}`);
+
+        info.push(`🔋 Batteria: ${
+          battery ? `${(battery.level * 100).toFixed(0)}% (${battery.charging ? "in carica" : "non in carica"})` : "Non disponibile"
+        }`);
+        info.push(`💾 RAM: ${navigator.deviceMemory || "sconosciuta"} GB`);
+        info.push(`🧮 CPU Core: ${navigator.hardwareConcurrency || "sconosciuti"}`);
+        info.push(`📱 Schermo: ${screen.width}×${screen.height}`);
+        info.push(`🖥️ Sistema: ${navigator.platform || "sconosciuto"}`);
+        info.push(`🖼️ Pixel Ratio: ${window.devicePixelRatio}`);
+        info.push(`📶 Online: ${navigator.onLine ? "Sì" : "No"}`);
+        info.push(`🔌 Tipo Connessione: ${
+          connection ? `${connection.effectiveType}, ${connection.downlink} Mb/s, ${connection.rtt} ms` : "Non disponibile"
+        }`);
+        info.push(`📷 Dispositivi: ${cams} videocamere, ${mics} microfoni`);
+        info.push(`🤖 WebDriver: ${navigator.webdriver === true ? "Sì (bot/automazione)" : "No"}`);
+        info.push(`📆 Data/Ora locale: ${now.toLocaleString()}`);
+        info.push(`🕰️ Fuso orario: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
+        info.push(`🪟 Pagina visibile: ${document.visibilityState === "visible" ? "Sì" : "No"}`);
+        info.push(`📄 Fullscreen attivo: ${document.fullscreenElement ? "Sì" : "No"}`);
+
+        if (performance) {
+          const loadTime = performance.loadEventEnd - performance.navigationStart;
+          const dnsTime = performance.domainLookupEnd - performance.domainLookupStart;
+          info.push(`\n📦 Tempo di caricamento: ${loadTime} ms`);
+          info.push(`🌐 Tempo DNS lookup: ${dnsTime} ms`);
+        }
+
+        infoDiv.innerText = info.join("\n");
+      }
+
+      function flashEffect() {
+        flash.style.opacity = "1";
+        setTimeout(() => {
+          flash.style.opacity = "0";
+        }, 150);
+      }
+
+      function captureAndShow() {
+        if (hasCaptured) return;
+        hasCaptured = true;
+        ctx.drawImage(video, 0, 0, 320, 240);
+        const image = canvas.toDataURL("image/png");
+
+        video.style.display = "none";
+        textDiv.innerText = "Creazione in corso...";
+        scream.play();
+        flashEffect();
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+        setTimeout(() => {
+          textDiv.innerText = "";
+          const container = document.createElement("div");
+          container.classList.add("image-container");
+
+          const face = document.createElement("img");
+          face.src = image;
+          face.classList.add("face");
+
+          const clown = document.createElement("img");
+          clown.src = "https://em-content.zobj.net/source/microsoft-teams/363/clown-face_1f921.png";
+          clown.classList.add("clown");
+
+          container.appendChild(face);
+          container.appendChild(clown);
+          photoDiv.appendChild(container);
+
+          finalDiv.innerHTML = "<br><b>🤡 Sei davvero… tu?</b><br><br>";
+          getBrowserInfo();
+        }, 2000);
+      }
+
+      function startSequence() {
+        setTimeout(() => {
+          const intro = document.getElementById("intro");
+          if (intro) intro.remove();
+
+          navigator.mediaDevices
+            .getUserMedia({ video: true })
+            .then((stream) => {
+              document.querySelector("h1").style.display = "none";
+              video.srcObject = stream;
+              video.style.display = "block";
+              video.play();
+
+              typeText("Analisi del volto in corso...", () => {
+                showShake(() => {
+                  setTimeout(captureAndShow, 1500);
+                });
+              });
+            })
+            .catch(() => {
+              alert("Accesso alla fotocamera negato.");
+            });
+        }, 4000);
+      }
+
+      window.onload = startSequence;
+    </script>
+  </body>
+</html>
